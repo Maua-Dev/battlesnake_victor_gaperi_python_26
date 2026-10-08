@@ -31,10 +31,10 @@ def info() -> dict:
 
     return {
         "apiversion": "1",
-        "author": "",          # TODO: coloque aqui o SEU usuário do Battlesnake
-        "color": "#8B0000",    # TODO: escolha a cor da sua cobra
-        "head": "tiger-king",  # TODO: escolha a cabeça
-        "tail": "hook",        # TODO: escolha a cauda
+        "author": "gasperi",
+        "color": "#E80978",
+        "head": "tiger-king",
+        "tail": "tiger-tail",
         "version": "1.0.0",
     }
 
