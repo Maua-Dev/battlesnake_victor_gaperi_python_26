@@ -61,7 +61,9 @@ def test_cabeca_a_cabeca_com_menor_e_permitida():
 
 
 def test_com_fome_vai_para_a_comida():
-    eu = snake(EU, [(5, 5), (5, 4), (5, 3)], health=50)
+    # Sem rivais e no turno 1, a fome vem da regra de sobrevivência: a comida
+    # está a 3 passos e 10 < 3 + 15. Com vida 50 já não seria fome.
+    eu = snake(EU, [(5, 5), (5, 4), (5, 3)], health=10)
     state = make_game(eu, food=[(2, 5)])
     assert get_move(state).move == "left"
 
@@ -88,12 +90,15 @@ def test_flood_fill_com_muro():
 
 
 def test_evita_o_beco():
-    # up leva a um bolsão de 2 casas entre a outra cobra e o próprio corpo;
-    # down e left dão no resto do tabuleiro e empatam, então vence down.
+    # A outra cobra acabou de comer: a cauda dela está empilhada em (4,10) e
+    # não sai do lugar. Por isso up leva a um bolsão de 2 casas, (5,10) e
+    # (6,10), entre a outra cobra e o próprio corpo. Se a cauda saísse do
+    # lugar, o bolsão se abriria por (4,10) e o teste deixaria de testar o beco.
+    # down e left dão no resto do tabuleiro, e down vence.
     eu = snake(EU, [(5, 9), (6, 9), (7, 9), (7, 10), (8, 10)])
     outra = snake("outra", [
         (0, 5), (0, 6), (0, 7), (0, 8), (0, 9), (0, 10),
-        (1, 10), (2, 10), (3, 10), (4, 10),
+        (1, 10), (2, 10), (3, 10), (4, 10), (4, 10),
     ])
     state = make_game(eu, others=[outra])
     assert get_move(state).move == "down"

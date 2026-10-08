@@ -14,21 +14,15 @@
 
 import random
 import logging
-from .models import Board, GameState, MoveResponse, Snake
-from .grid import (
-    Pos, pos, step, manhattan, occupied, opponent_cells,
-    would_lose_head_to_head, threat_zones, nearest_food,
-)
-from .floodfill import flood_fill
-from .astar import a_star
+from .models import GameState, MoveResponse
+from .grid import pos, step, opponent_cells, tail_moves
+from .features import snapshot, build_context, evaluate_moves
+from .decision import decide
 
 logger = logging.getLogger(__name__)
 # O runtime Python da Lambda deixa o logger raiz em WARNING: sem esta linha
 # as jogadas nao aparecem no CloudWatch.
 logger.setLevel(logging.INFO)
-
-# Abaixo desta vida a cobra passa a ir atrás de comida.
-HUNGER_THRESHOLD = 80
 
 
 def info() -> dict:
@@ -108,10 +102,12 @@ def get_move(state: GameState) -> MoveResponse:
     # 3. Impedir que a cobra bata no próprio corpo
     my_body = state.you.body
     # A cauda anda junto com a cabeça, então a casa dela fica livre neste
-    # turno. O bloco do pescoço, lá em cima, continua barrando a meia-volta.
+    # turno, exceto logo depois de comer (cauda empilhada, ver tail_moves).
+    # O bloco do pescoço, lá em cima, continua barrando a meia-volta.
     my_tail = my_body[-1]
+    free_tail = tail_moves(state.you)
     for segment in my_body:
-        if segment == my_tail:
+        if free_tail and segment == my_tail:
             continue
         if segment.x == my_head.x + 1 and segment.y == my_head.y:
             is_move_safe["right"] = False
@@ -130,12 +126,9 @@ def get_move(state: GameState) -> MoveResponse:
         if is_move_safe[direction] and step(head, direction) in rivals:
             is_move_safe[direction] = False
 
-    # 5. Evitar cabeça a cabeça com rivais de tamanho maior ou igual
-    for direction in is_move_safe:
-        if is_move_safe[direction] and would_lose_head_to_head(
-            state.board, state.you, step(head, direction)
-        ):
-            is_move_safe[direction] = False
+    # O cabeça a cabeça com rival maior ou igual não elimina a direção: ele
+    # só a marca como arriscada (MoveFeatures.risky), e a decisão prefere as
+    # não arriscadas. Um cabeça a cabeça incerto é melhor que um beco certo.
 
     # Sobrou alguma direção segura?
     safe_moves = [direction for direction, safe in is_move_safe.items() if safe]
@@ -156,42 +149,13 @@ def get_move(state: GameState) -> MoveResponse:
 
 
 def choose_move(state: GameState, safe_moves: list[str]) -> str:
-    """Escolhe uma direção dentre safe_moves (que nunca chega vazia)."""
-    head = pos(state.you.body[0])
-    hungry = state.you.health < HUNGER_THRESHOLD
-    food = nearest_food(state.board, head)
+    """Escolhe uma direção dentre safe_moves (que nunca chega vazia).
 
-    my_obstacles = obstacles(state.board, state.you)
-
-    if hungry and food is not None:
-        # Com fome: segue o primeiro passo do caminho A* até a comida, desde
-        # que esse passo seja uma direção segura. Senão, cai no flood fill.
-        path = a_star(state.board, head, food, my_obstacles)
-        if len(path) >= 2:
-            for direction in safe_moves:
-                if step(head, direction) == path[1]:
-                    return direction
-
-    # Flood fill: fica a direção que deixa mais espaço livre pela frente.
-    blocked = my_obstacles | threat_zones(state.board, state.you)
-    best_move = safe_moves[0]
-    best_score = None
-    for direction in safe_moves:
-        new_head = step(head, direction)
-        # A nova cabeça não entra em blocked: senão uma direção segura que
-        # cai numa threat_zone teria área 0 mesmo havendo espaço.
-        area = flood_fill(state.board, new_head, blocked - {new_head})
-        tiebreak = 0
-        if hungry and food is not None:
-            closest = nearest_food(state.board, new_head)
-            tiebreak = 100 - manhattan(new_head, closest)
-        score = (area, tiebreak)
-        # Comparação estrita: num empate total fica a primeira direção.
-        if best_score is None or score > best_score:
-            best_move, best_score = direction, score
-    return best_move
-
-
-def obstacles(board: Board, you: Snake) -> set[Pos]:
-    """Casas ocupadas por qualquer cobra, menos a própria cauda (que anda junto)."""
-    return occupied(board) - {pos(you.body[-1])}
+    Três etapas: safe_moves são as candidatas, evaluate_moves mede cada uma e
+    decide escolhe só a partir dessas medições e do contexto.
+    """
+    snap = snapshot(state)
+    ctx = build_context(state, snap)
+    features = evaluate_moves(state, safe_moves, snap)
+    logger.debug("MOVE %d: %s %s", state.turn, ctx, features)
+    return decide(features, ctx)

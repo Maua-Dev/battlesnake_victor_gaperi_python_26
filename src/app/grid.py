@@ -43,6 +43,25 @@ def occupied(board: Board) -> set[Pos]:
     return {pos(segment) for snake in board.snakes for segment in snake.body}
 
 
+def tail_moves(snake: Snake) -> bool:
+    """Diz se a cauda sai do lugar neste turno.
+
+    Logo depois de comer, os dois últimos segmentos ocupam a mesma casa e a
+    cauda fica parada. Numa cobra de tamanho 1 a cauda é a própria cabeça,
+    que tratamos como ocupada.
+    """
+    return len(snake.body) > 1 and snake.body[-1] != snake.body[-2]
+
+
+def obstacles(board: Board) -> set[Pos]:
+    """Casas ocupadas por qualquer cobra, menos as caudas que saem do lugar."""
+    result = set()
+    for snake in board.snakes:
+        body = snake.body[:-1] if tail_moves(snake) else snake.body
+        result.update(pos(segment) for segment in body)
+    return result
+
+
 def opponent_cells(board: Board, you: Snake) -> set[Pos]:
     """Casas ocupadas pelas adversárias, cauda incluída."""
     return {
