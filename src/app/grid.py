@@ -62,16 +62,6 @@ def obstacles(board: Board) -> set[Pos]:
     return result
 
 
-def opponent_cells(board: Board, you: Snake) -> set[Pos]:
-    """Casas ocupadas pelas adversárias, cauda incluída."""
-    return {
-        pos(segment)
-        for snake in board.snakes
-        if snake.id != you.id
-        for segment in snake.body
-    }
-
-
 def neighbors(board: Board, p: Pos, blocked: set[Pos]) -> list[Pos]:
     """Vizinhos de p dentro do tabuleiro e fora de blocked, na ordem de MOVES."""
     result = []

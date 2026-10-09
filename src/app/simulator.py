@@ -98,20 +98,32 @@ def step(board: BoardState, moves: dict[str, str]) -> BoardState:
     )
 
 
-def safe_moves(board: BoardState, snake_id: str) -> list[str]:
-    """As direções que não são morte certa para a cobra, na ordem canônica.
+def occupied_after_turn(board: BoardState) -> set[int]:
+    """As casas que continuam ocupadas depois do turno, qualquer que seja o
+    movimento das cobras: todo segmento menos o último de cada cobra viva.
 
-    Ficam fora: sair do tabuleiro, o pescoço e as casas que continuam
-    ocupadas depois do turno qualquer que seja o movimento das outras, isto
-    é, todo segmento menos o último de cada cobra viva. Uma cauda só fica
-    livre se não estiver empilhada. Sem nenhuma direção, devolve a primeira
-    da ordem canônica, que elimina a cobra.
+    Pelas regras oficiais, o último segmento sai do lugar antes da
+    alimentação, então a cauda fica livre mesmo que a cobra coma. Uma cauda
+    empilhada (logo depois de comer) continua ocupada, porque o penúltimo
+    segmento está na mesma casa. É a regra do filtro de logic.get_move e de
+    safe_moves, para que os dois não divirjam.
     """
-    me = board.snake(snake_id)
     occupied = set()
     for s in board.snakes:
         if s.alive:
             occupied.update(s.body[:-1])
+    return occupied
+
+
+def safe_moves(board: BoardState, snake_id: str) -> list[str]:
+    """As direções que não são morte certa para a cobra, na ordem canônica.
+
+    Ficam fora: sair do tabuleiro, o pescoço e as casas de
+    occupied_after_turn. Sem nenhuma direção, devolve a primeira da ordem
+    canônica, que elimina a cobra.
+    """
+    me = board.snake(snake_id)
+    occupied = occupied_after_turn(board)
     neck = me.body[1] if me.length > 1 and me.body[1] != me.head else None
     result = []
     for move, cell in zip(MOVE_ORDER, board.steps[me.head]):

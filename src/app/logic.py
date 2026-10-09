@@ -16,9 +16,10 @@ import random
 from collections import Counter
 
 from . import board_state, clock, config, search, telemetry
-from .board_state import hazard_damage
+from .board_state import BoardState, hazard_damage, idx
 from .models import GameState, MoveResponse
-from .grid import pos, step, opponent_cells, tail_moves
+from .grid import pos, step
+from .simulator import occupied_after_turn
 from .features import snapshot, build_context, evaluate_moves
 from .decision import explain
 
@@ -61,13 +62,42 @@ def get_move(state: GameState, started_at: float | None = None) -> MoveResponse:
     if started_at is None:
         started_at = clock.now()
     deadline = clock.Deadline(started_at, clock.budget_ms(state.game.timeout))
+    board = board_state.from_game(state)
 
-    is_move_safe: dict[str, bool] = {
-        "up": True,
-        "down": True,
-        "left": True,
-        "right": True,
+    # Sobrou alguma direção segura?
+    reasons = filter_moves(state, board)
+    safe_moves = [direction for direction, reason in reasons.items() if reason is None]
+
+    if not safe_moves:
+        # Emergência: todas as direções são perigosas.
+        # Escolhemos uma ao acaso entre as 4 — melhor do que travar.
+        all_moves = ["up", "down", "left", "right"]
+        move = random.choice(all_moves)
+    else:
+        # Escolhe, entre as direções seguras, a melhor segundo a estratégia.
+        move = choose_move(state, safe_moves, deadline=deadline, board=board)
+
+    telemetry.log_move(state, move)
+    return MoveResponse(move=move)
+
+
+def filter_moves(state: GameState, board: BoardState) -> dict[str, str | None]:
+    """O filtro de get_move: para cada direção, na ordem canônica, o motivo
+    da eliminação ("neck", "wall", "body" ou "health") ou None, se a direção
+    é candidata. Vale o primeiro motivo encontrado.
+
+    board é o BoardState da jogada (board_state.from_game(state)).
+    """
+    reasons: dict[str, str | None] = {
+        "up": None,
+        "down": None,
+        "left": None,
+        "right": None,
     }
+
+    def eliminate(direction: str, reason: str) -> None:
+        if reasons[direction] is None:
+            reasons[direction] = reason
 
     # --- Impedir que a cobra ande para trás (já implementado) ---
     # O pescoço é a parte do corpo logo atrás da cabeça. Voltar por cima dele
@@ -78,58 +108,45 @@ def get_move(state: GameState, started_at: float | None = None) -> MoveResponse:
     if my_neck is not None:
         if my_neck.x < my_head.x:
             # pescoço à esquerda da cabeça -> não vá para a esquerda
-            is_move_safe["left"] = False
+            eliminate("left", "neck")
         elif my_neck.x > my_head.x:
             # pescoço à direita da cabeça -> não vá para a direita
-            is_move_safe["right"] = False
+            eliminate("right", "neck")
         elif my_neck.y < my_head.y:
             # pescoço abaixo da cabeça -> não desça
-            is_move_safe["down"] = False
+            eliminate("down", "neck")
         elif my_neck.y > my_head.y:
             # pescoço acima da cabeça -> não suba
-            is_move_safe["up"] = False
+            eliminate("up", "neck")
 
     # 2. Impedir que a cobra saia do tabuleiro (paredes)
     board_width = state.board.width
     board_height = state.board.height
 
     if my_head.x + 1 >= board_width:
-        is_move_safe["right"] = False
+        eliminate("right", "wall")
     if my_head.x - 1 < 0:
-        is_move_safe["left"] = False
+        eliminate("left", "wall")
     if my_head.y + 1 >= board_height:
-        is_move_safe["up"] = False
+        eliminate("up", "wall")
     if my_head.y - 1 < 0:
-        is_move_safe["down"] = False
+        eliminate("down", "wall")
 
-    # 3. Impedir que a cobra bata no próprio corpo
-    my_body = state.you.body
+    # 3. Impedir que a cobra bata num corpo, o próprio ou o das adversárias.
     # A cauda anda junto com a cabeça, então a casa dela fica livre neste
-    # turno, exceto logo depois de comer (cauda empilhada, ver tail_moves).
-    # O bloco do pescoço, lá em cima, continua barrando a meia-volta.
-    my_tail = my_body[-1]
-    free_tail = tail_moves(state.you)
-    for segment in my_body:
-        if free_tail and segment == my_tail:
-            continue
-        if segment.x == my_head.x + 1 and segment.y == my_head.y:
-            is_move_safe["right"] = False
-        if segment.x == my_head.x - 1 and segment.y == my_head.y:
-            is_move_safe["left"] = False
-        if segment.x == my_head.x and segment.y == my_head.y + 1:
-            is_move_safe["up"] = False
-        if segment.x == my_head.x and segment.y == my_head.y - 1:
-            is_move_safe["down"] = False
-
-    # 4. Impedir que a cobra bata nas adversárias (a cauda delas continua
-    # bloqueada: se a rival comer neste turno, a cauda não sai do lugar)
+    # turno, mesmo que a cobra coma (o movimento vem antes da alimentação),
+    # exceto logo depois de comer (cauda empilhada). É a mesma regra do
+    # simulador da busca (occupied_after_turn). O bloco do pescoço, lá em
+    # cima, continua barrando a meia-volta.
     head = pos(my_head)
-    rivals = opponent_cells(state.board, state.you)
-    for direction in is_move_safe:
-        if is_move_safe[direction] and step(head, direction) in rivals:
-            is_move_safe[direction] = False
+    occupied = occupied_after_turn(board)
+    for direction in reasons:
+        if reasons[direction] is None:
+            x, y = step(head, direction)
+            if idx(x, y, board.width) in occupied:
+                eliminate(direction, "body")
 
-    # 5. Impedir que a cobra morra de fome ou num hazard. As regras oficiais
+    # 4. Impedir que a cobra morra de fome ou num hazard. As regras oficiais
     # do modo standard rodam nesta ordem: movimento, perda de 1 de vida,
     # dano de hazard (que não vale numa casa com comida), alimentação e só
     # então as eliminações. Então, sem comida no destino, a vida que sobra é
@@ -138,37 +155,24 @@ def get_move(state: GameState, started_at: float | None = None) -> MoveResponse:
     damage = hazard_damage(state.game.ruleset)
     food = {pos(f) for f in state.board.food}
     hazards = Counter(pos(h) for h in state.board.hazards)
-    for direction in is_move_safe:
+    for direction in reasons:
         target = step(head, direction)
-        if not is_move_safe[direction] or target in food:
+        if reasons[direction] is not None or target in food:
             continue
         if state.you.health - 1 - damage * hazards[target] <= 0:
-            is_move_safe[direction] = False
+            eliminate(direction, "health")
 
     # O cabeça a cabeça com rival maior ou igual não elimina a direção: ele
     # só a marca como arriscada (MoveFeatures.risky), e a decisão prefere as
     # não arriscadas. Um cabeça a cabeça incerto é melhor que um beco certo.
-
-    # Sobrou alguma direção segura?
-    safe_moves = [direction for direction, safe in is_move_safe.items() if safe]
-
-    if not safe_moves:
-        # Emergência: todas as direções são perigosas.
-        # Escolhemos uma ao acaso entre as 4 — melhor do que travar.
-        all_moves = ["up", "down", "left", "right"]
-        move = random.choice(all_moves)
-    else:
-        # Escolhe, entre as direções seguras, a melhor segundo a estratégia.
-        move = choose_move(state, safe_moves, deadline=deadline)
-
-    telemetry.log_move(state, move)
-    return MoveResponse(move=move)
+    return reasons
 
 
 def choose_move(
     state: GameState,
     safe_moves: list[str],
     deadline: clock.Deadline | None = None,
+    board: BoardState | None = None,
 ) -> str:
     """Escolhe uma direção dentre safe_moves (que nunca chega vazia).
 
@@ -177,10 +181,13 @@ def choose_move(
     contexto. Essa escolha heurística fica pronta primeiro. Depois, num
     duelo e se o prazo ainda não passou, a busca pode substituí-la, mas só
     com o resultado de uma profundidade que terminou dentro do prazo.
+
+    board é o BoardState da jogada; sem ele, é montado aqui.
     """
     if deadline is None:
         deadline = clock.Deadline(clock.now(), clock.budget_ms(state.game.timeout))
-    board = board_state.from_game(state)
+    if board is None:
+        board = board_state.from_game(state)
     snap = snapshot(state, board)
     ctx = build_context(state, snap)
     features = evaluate_moves(state, safe_moves, snap, deadline)

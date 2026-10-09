@@ -3,8 +3,10 @@ do modo standard.
 
 Rode com: pytest tests/app/test_simulador.py
 """
+from dataclasses import replace
+
 from src.app.board_state import from_game, idx, xy
-from src.app.simulator import safe_moves, step
+from src.app.simulator import occupied_after_turn, safe_moves, step
 from tests.helpers import snake, make_game
 
 A, B = "a", "b"
@@ -214,6 +216,34 @@ def test_estado_original_intacto():
     assert board.snake(A).body == corpo_a
     assert board.snake(A).health == vida_a
     assert board.food == comida
+
+
+# --- Casas ocupadas depois do turno ---
+
+def ocupadas(board):
+    return {xy(c, board.width) for c in occupied_after_turn(board)}
+
+
+def test_ocupadas_sem_a_cauda_que_sai_do_lugar():
+    board = tabuleiro(snake(A, [(1, 1), (1, 0), (0, 0)]))
+    assert ocupadas(board) == {(1, 1), (1, 0)}
+
+
+def test_ocupadas_com_a_cauda_empilhada():
+    board = tabuleiro(snake(A, [(1, 1), (1, 0), (0, 0), (0, 0)]))
+    assert ocupadas(board) == {(1, 1), (1, 0), (0, 0)}
+
+
+def test_ocupadas_com_o_corpo_todo_empilhado():
+    board = tabuleiro(snake(A, [(5, 5), (5, 5), (5, 5)]))
+    assert ocupadas(board) == {(5, 5)}
+
+
+def test_ocupadas_ignora_cobra_eliminada():
+    board = tabuleiro(snake(A, [(1, 1), (1, 0), (0, 0)]), snake(B, [(5, 5), (5, 4), (5, 3)]))
+    morta = replace(board.snake(B), alive=False)
+    board = replace(board, snakes=(board.snake(A), morta))
+    assert ocupadas(board) == {(1, 1), (1, 0)}
 
 
 # --- Direções que não são morte certa ---

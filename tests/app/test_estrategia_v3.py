@@ -4,8 +4,8 @@ medições, sobrevivência, comida alvo pelo território e as parcelas novas.
 Rode com: pytest tests/app/test_estrategia_v3.py
 
 Nos desenhos ASCII, y cresce para cima (a primeira linha é a de cima):
-E = minha cabeça, e = meu corpo, R = cabeça da rival, r = corpo da rival,
-* = comida, h = hazard e . = casa livre.
+E = minha cabeça, e = meu corpo, t = minha cauda, R = cabeça da rival,
+r = corpo da rival, * = comida, h = hazard e . = casa livre.
 
 Os cenários de get_move testam a escolha heurística: a busca do duelo fica
 desligada (fixture sem_busca, em tests/conftest.py).
@@ -16,6 +16,7 @@ import time
 import pytest
 
 from src.app import logic
+from src.app.board_state import from_game
 from src.app.decision import DecisionContext, MoveFeatures, decide, explain
 from src.app.features import build_context, evaluate_moves, snapshot
 from src.app.logic import get_move
@@ -100,6 +101,93 @@ def test_comida_no_hazard(candidatas):
 def test_hazard_sem_dano_nao_elimina(candidatas):
     state = make_game(snake(EU, COBRA_DE_3, health=2), hazards=[(5, 6)])
     assert candidatas(state) == ["up", "left", "right"]
+
+
+# --- Cauda das adversárias no filtro ---
+
+def medicoes(state, candidatas_do_filtro):
+    """As medições de cada candidata, por direção."""
+    return {f.move: f for f in evaluate_moves(state, candidatas_do_filtro)}
+
+
+def test_cauda_de_rival_menor_que_sai_do_lugar(candidatas):
+    # Turno 74 da partida dc8c4f05-84ac-4554-98f6-94b22d5a8b4d.
+    #   x: 0 1 2 3 4
+    # y=5  e e e t .
+    # y=4  e . E r R     a cauda da rival (3,4) não está empilhada: sai do
+    # y=3  e . e r r     lugar mesmo que ela coma, então right é candidata.
+    # y=2  e e e . .     left leva a um bolsão de 2 casas.
+    state = make_game(
+        snake(EU, [
+            (2, 4), (2, 3), (2, 2), (1, 2), (0, 2), (0, 3), (0, 4), (0, 5),
+            (1, 5), (2, 5), (3, 5),
+        ], health=96),
+        others=[snake("rival", [(4, 4), (4, 3), (3, 3), (3, 4)], health=40)],
+        food=[(1, 9), (10, 4), (7, 2)],
+        turn=74,
+    )
+    assert candidatas(state) == ["left", "right"]
+    right = medicoes(state, ["left", "right"])["right"]
+    # A rival é menor: se voltar para (3,4), ela morre no cabeça a cabeça.
+    assert right.kill_chance and not right.risky
+    assert get_move(state).move == "right"
+
+
+def test_cauda_empilhada_de_rival_continua_bloqueando(candidatas):
+    #   x: 4 5 6 7 8
+    # y=6  . . . . .
+    # y=5  . E r r R     a rival acabou de comer: a cauda (6,5) está
+    # y=4  . e . . .     empilhada e não sai do lugar
+    state = make_game(
+        snake(EU, COBRA_DE_3),
+        others=[snake("rival", [(8, 5), (7, 5), (6, 5), (6, 5)])],
+    )
+    assert candidatas(state) == ["up", "left"]
+
+
+def test_cauda_de_rival_maior_com_a_cabeca_vizinha(candidatas):
+    #   x: 4 5 6 7
+    # y=6  . . R r     a rival (tamanho 4) pode voltar para a própria cauda
+    # y=5  . E r r     (6,5): right é candidata, mas arriscada, como up
+    # y=4  . e . .
+    state = make_game(
+        snake(EU, COBRA_DE_3),
+        others=[snake("rival", [(6, 6), (7, 6), (7, 5), (6, 5)])],
+    )
+    assert candidatas(state) == ["up", "left", "right"]
+    medidas = medicoes(state, ["up", "left", "right"])
+    assert medidas["right"].risky and medidas["up"].risky
+    assert not medidas["left"].risky
+    assert get_move(state).move == "left"
+
+
+def motivos(state):
+    """O que filter_moves diz de cada direção."""
+    return logic.filter_moves(state, from_game(state))
+
+
+def test_motivos_pescoco_e_corpos():
+    #   x: 4 5 6 7
+    # y=7  . . R .
+    # y=6  t . r .     down é o pescoço (que também é corpo: vale "neck"),
+    # y=5  e E r r     left é o meu corpo e right, o corpo da rival
+    # y=4  e e . .
+    state = make_game(
+        snake(EU, [(5, 5), (5, 4), (4, 4), (4, 5), (4, 6)]),
+        others=[snake("rival", [(6, 7), (6, 6), (6, 5), (7, 5)])],
+    )
+    assert motivos(state) == {"up": None, "down": "neck", "left": "body", "right": "body"}
+
+
+def test_motivos_parede_e_vida():
+    #   x: 0 1 2
+    # y=6  . . .     vida 1 e nenhuma comida: up e down matam de fome
+    # y=5  E e e
+    # y=4  . . .
+    state = make_game(snake(EU, [(0, 5), (1, 5), (2, 5)], health=1))
+    assert motivos(state) == {
+        "up": "health", "down": "health", "left": "wall", "right": "neck",
+    }
 
 
 # --- Medições novas ---

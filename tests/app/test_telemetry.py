@@ -264,7 +264,7 @@ def cenarios_de_estrategia():
     """Estados com resposta única: os desta suíte e os de test_estrategia.py."""
     entra_na_cauda = make_game(
         snake(EU, [(5, 10), (5, 9), (4, 9), (4, 10)]),
-        others=[snake("bloqueio", [(8, 10), (7, 10), (6, 10)])],
+        others=[snake("bloqueio", [(8, 10), (7, 10), (6, 10), (6, 9)])],
     )
     igual = make_game(
         snake(EU, [(5, 10), (5, 9), (5, 8)]),

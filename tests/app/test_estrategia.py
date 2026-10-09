@@ -28,9 +28,10 @@ def test_desvia_de_adversaria():
 
 def test_entra_na_propria_cauda():
     # A cauda (4,10) sai do lugar neste turno, então left é a única saída:
-    # up é parede, down é o pescoço e right é o corpo do bloqueio.
+    # up é parede, down é o pescoço e right é o corpo do bloqueio. A cauda
+    # do bloqueio fica em (6,9): (6,10) é corpo do meio e não sai do lugar.
     eu = snake(EU, [(5, 10), (5, 9), (4, 9), (4, 10)])
-    bloqueio = snake("bloqueio", [(8, 10), (7, 10), (6, 10)])
+    bloqueio = snake("bloqueio", [(8, 10), (7, 10), (6, 10), (6, 9)])
     state = make_game(eu, others=[bloqueio])
     assert get_move(state).move == "left"
 
