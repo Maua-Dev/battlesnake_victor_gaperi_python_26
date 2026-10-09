@@ -39,6 +39,18 @@ class MoveFeatures:
     danger: bool
     # Distância de Manhattan da nova cabeça até o centro do tabuleiro.
     center_dist: int
+    # Os campos abaixo têm valor padrão: uma medição montada sem eles
+    # continua válida e não ganha nem perde pontos por eles.
+    # Maior profundidade da DFS de sobrevivência e se chegou à profundidade
+    # alvo, min(tamanho, SURVIVAL_MAX_DEPTH).
+    survival_depth: int = 0
+    survives: bool = True
+    # A nova cabeça cai num hazard sem comida, e o dano da partida é > 0.
+    hazard: bool = False
+    # 100 * casas da maior rival no território desta candidata / casas livres.
+    rival_territory_pct: float = 0.0
+    # A comida alvo é minha no território desta candidata.
+    food_owned: bool = False
 
 
 @dataclass(frozen=True)
@@ -63,8 +75,11 @@ def layer(f: MoveFeatures) -> int:
 def score_terms(f: MoveFeatures, ctx: DecisionContext) -> dict[str, float]:
     """As parcelas da nota, na ordem da soma; condição falsa vale 0.
 
-    Os pesos vêm de config. danger e center entram negativas.
+    Os pesos vêm de config. danger, center, hazard e squeeze entram
+    negativas. survival é proporcional à profundidade alcançada pela DFS,
+    sobre a profundidade alvo.
     """
+    target_depth = max(1, min(ctx.length, config.SURVIVAL_MAX_DEPTH))
     return {
         "territory": config.W_TERRITORY * f.territory_pct,
         "food": config.W_FOOD if ctx.hungry and f.food_step else 0,
@@ -73,6 +88,9 @@ def score_terms(f: MoveFeatures, ctx: DecisionContext) -> dict[str, float]:
         "hunt": config.W_HUNT if f.hunt_step and not ctx.hungry else 0,
         "danger": -config.W_DANGER if f.danger else 0,
         "center": -config.W_CENTER * f.center_dist if not ctx.hungry else 0,
+        "survival": config.W_SURVIVAL * f.survival_depth / target_depth,
+        "hazard": -config.W_HAZARD if f.hazard else 0,
+        "squeeze": -config.W_SQUEEZE * f.rival_territory_pct,
     }
 
 
@@ -93,7 +111,8 @@ class RankedMove:
 @dataclass(frozen=True)
 class Decision:
     """O movimento escolhido, o motivo e todas as candidatas, da melhor
-    para a pior.
+    para a pior. Essa ordem é a que a busca do duelo usa para ordenar e
+    desempatar os movimentos da raiz.
 
     reason é um entre:
       only_option  havia uma única candidata;

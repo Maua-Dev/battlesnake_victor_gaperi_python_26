@@ -1,7 +1,12 @@
 """Testes da estratégia da cobra: cada cenário tem uma única resposta certa.
 
 Rode com: pytest tests/app/test_estrategia.py
+
+Os cenários testam a escolha heurística: a busca do duelo fica desligada
+(fixture sem_busca, em tests/conftest.py).
 """
+import pytest
+
 from src.app.logic import get_move
 from src.app.grid import would_lose_head_to_head
 from src.app.floodfill import flood_fill
@@ -9,6 +14,8 @@ from src.app.astar import a_star
 from tests.helpers import snake, make_game
 
 EU = "eu"
+
+pytestmark = pytest.mark.usefixtures("sem_busca")
 
 
 def test_desvia_de_adversaria():
@@ -90,15 +97,15 @@ def test_flood_fill_com_muro():
 
 
 def test_evita_o_beco():
-    # A outra cobra acabou de comer: a cauda dela está empilhada em (4,10) e
-    # não sai do lugar. Por isso up leva a um bolsão de 2 casas, (5,10) e
-    # (6,10), entre a outra cobra e o próprio corpo. Se a cauda saísse do
-    # lugar, o bolsão se abriria por (4,10) e o teste deixaria de testar o beco.
-    # down e left dão no resto do tabuleiro, e down vence.
-    eu = snake(EU, [(5, 9), (6, 9), (7, 9), (7, 10), (8, 10)])
+    #   x: 0 1 2 3 4 5
+    # y=10 . . E e e e     left leva a uma área de 2 casas, (1,10) e (0,10),
+    # y=9  r r . . . .     cercada por segmentos que só liberam depois de a
+    # y=8  r r r r r R     cobra chegar: (1,9) em 5 movimentos e (0,9) em 4.
+    # y=7  r . . . . .     down dá no resto do tabuleiro
+    # y=6  r . . . . .
+    eu = snake(EU, [(2, 10), (3, 10), (4, 10), (5, 10)])
     outra = snake("outra", [
-        (0, 5), (0, 6), (0, 7), (0, 8), (0, 9), (0, 10),
-        (1, 10), (2, 10), (3, 10), (4, 10), (4, 10),
+        (5, 8), (4, 8), (3, 8), (2, 8), (1, 8), (1, 9), (0, 9), (0, 8), (0, 7), (0, 6),
     ])
     state = make_game(eu, others=[outra])
     assert get_move(state).move == "down"

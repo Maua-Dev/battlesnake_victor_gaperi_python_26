@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from mangum import Mangum
-from . import logic, telemetry
+from . import clock, logic, telemetry
 from .models import GameState, MoveResponse
 
 app = FastAPI()
@@ -36,7 +36,11 @@ async def remove_stage_prefix(request: Request, call_next):
 
     Dependendo de como a API e exposta, o caminho pode chegar como "/dev/move"
     em vez de "/move". Sem esta normalizacao a rota nao casa e vira 404.
+
+    Também marca o instante de chegada, antes de o FastAPI validar o corpo:
+    o prazo da jogada conta a partir daqui (ver clock.Deadline).
     """
+    request.state.started_at = clock.now()
     request.scope["path"] = strip_stage_prefix(request.scope["path"])
 
     return await call_next(request)
@@ -70,10 +74,10 @@ def start(state: GameState) -> str:
 # exclude_none tira o "shout": null da resposta — o contrato define shout
 # como opcional, e nao como nulo.
 @app.post("/move", response_model_exclude_none=True)
-def move(state: GameState) -> MoveResponse:
+def move(state: GameState, request: Request) -> MoveResponse:
     """POST /move — chamado a cada turno. Chama a lógica da cobra."""
     with telemetry.report_errors("/move", state):
-        return logic.get_move(state)
+        return logic.get_move(state, started_at=request.state.started_at)
 
 
 @app.post("/end")

@@ -166,13 +166,15 @@ def com_fome():
 
 
 def beco_versus_cabeca_a_cabeca():
-    #   x: 0 1 2
-    # y=3  R . .      up é arriscada mas tem espaço; down é segura e dá num
-    # y=2  . . .      bolsão de 2 casas: up vence pela camada
-    # y=1  E e e
-    # y=0  . e e
-    eu = snake(EU, [(0, 1), (1, 1), (2, 1), (2, 0), (1, 0)])
-    maior = snake("maior", [(0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8)])
+    #   x: 0 1 2 3 4 5
+    # y=10 . . E e e e     left é segura e dá num bolsão de 2 casas; down é
+    # y=9  r r . . . .     arriscada mas tem espaço: down vence pela camada
+    # y=8  r r R . . .
+    # y=7  r . . . . .
+    # y=6  r . . . . .
+    # y=5  r . . . . .
+    eu = snake(EU, [(2, 10), (3, 10), (4, 10), (5, 10)])
+    maior = snake("maior", [(2, 8), (1, 8), (1, 9), (0, 9), (0, 8), (0, 7), (0, 6), (0, 5)])
     return make_game(eu, others=[maior])
 
 
@@ -271,10 +273,9 @@ def cenarios_de_estrategia():
     fome_esquerda = make_game(snake(EU, [(5, 5), (5, 4), (5, 3)], health=10), food=[(2, 5)])
     sem_fome = make_game(snake(EU, [(5, 5), (5, 4), (5, 3)], health=100), food=[(2, 5)])
     beco = make_game(
-        snake(EU, [(5, 9), (6, 9), (7, 9), (7, 10), (8, 10)]),
+        snake(EU, [(2, 10), (3, 10), (4, 10), (5, 10)]),
         others=[snake("outra", [
-            (0, 5), (0, 6), (0, 7), (0, 8), (0, 9), (0, 10),
-            (1, 10), (2, 10), (3, 10), (4, 10), (4, 10),
+            (5, 8), (4, 8), (3, 8), (2, 8), (1, 8), (1, 9), (0, 9), (0, 8), (0, 7), (0, 6),
         ])],
     )
     return [
@@ -282,7 +283,7 @@ def cenarios_de_estrategia():
         (cabeca_a_cabeca_com_maior(), "right"),
         (centro_sem_fome(), "up"),
         (com_fome(), "right"),
-        (beco_versus_cabeca_a_cabeca(), "up"),
+        (beco_versus_cabeca_a_cabeca(), "down"),
         (entra_na_cauda, "left"),
         (igual, "right"),
         (fome_esquerda, "left"),
@@ -292,7 +293,7 @@ def cenarios_de_estrategia():
 
 
 @pytest.mark.parametrize("state, esperado", cenarios_de_estrategia())
-def test_logs_nao_mudam_a_decisao(state, esperado, nivel):
+def test_logs_nao_mudam_a_decisao(state, esperado, nivel, sem_busca):
     nivel(logging.CRITICAL)
     sem_logs = get_move(state).move
     nivel(logging.DEBUG)
@@ -303,7 +304,7 @@ def test_logs_nao_mudam_a_decisao(state, esperado, nivel):
 # --- Evento error ---
 
 def test_falha_na_escolha_do_movimento(eventos, monkeypatch):
-    def quebra(state, safe_moves):
+    def quebra(state, safe_moves, **kwargs):
         raise RuntimeError("falhou de propósito")
     monkeypatch.setattr(logic, "choose_move", quebra)
 

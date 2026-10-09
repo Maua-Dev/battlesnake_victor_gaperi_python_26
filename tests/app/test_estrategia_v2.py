@@ -6,6 +6,9 @@ Rode com: pytest tests/app/test_estrategia_v2.py
 Nos desenhos ASCII, y cresce para cima (a primeira linha é a de cima):
 E = minha cabeça, e = meu corpo, R = cabeça da rival, r = corpo da rival,
 * = comida e . = casa livre.
+
+Os cenários testam a escolha heurística: a busca do duelo fica desligada
+(fixture sem_busca, em tests/conftest.py).
 """
 import subprocess
 import sys
@@ -24,6 +27,8 @@ from src.app.voronoi import voronoi
 from tests.helpers import snake, make_game
 
 EU = "eu"
+
+pytestmark = pytest.mark.usefixtures("sem_busca")
 
 
 def test_config_tem_os_valores_iniciais():
@@ -145,17 +150,35 @@ def test_risky_marca_casa_alcancavel_por_rival_igual():
     assert f["right"].risky is False
 
 
-def test_area_de_bolsao_menor_que_a_cobra():
-    #   x: 0 1 2
-    # y=3  R . .
-    # y=2  . . .
-    # y=1  E e e
-    # y=0  . e e       a cauda (1,0) sai do lugar: down leva a 2 casas
+def test_fuga_perseguindo_a_propria_cauda():
+    #   x: 0 1 2 3
+    # y=3  R . . .
+    # y=2  . . . .
+    # y=1  E e e .     down leva a (0,0); (1,0) libera em 1 movimento e
+    # y=0  . e e .     (2,0) em 2, e por eles a cobra sai para o resto
     eu = snake(EU, [(0, 1), (1, 1), (2, 1), (2, 0), (1, 0)])
     maior = snake("maior", [(0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8)])
     f = medir(make_game(eu, others=[maior]), ["up", "down"])
-    assert (f["down"].area, f["down"].roomy) == (2, False)
+    assert f["down"].area > 5
+    assert f["down"].roomy is True
     assert f["up"].roomy is True
+
+
+BOLSAO_EU = [(2, 10), (3, 10), (4, 10), (5, 10)]
+BOLSAO_RIVAL = [(5, 8), (4, 8), (3, 8), (2, 8), (1, 8), (1, 9), (0, 9), (0, 8), (0, 7), (0, 6)]
+
+
+def test_area_de_bolsao_menor_que_a_cobra():
+    #   x: 0 1 2 3 4 5
+    # y=10 . . E e e e     left leva a (1,10) e (0,10): (1,9) só libera em
+    # y=9  r r . . . .     5 movimentos e (0,9) só em 4, depois de a cobra
+    # y=8  r r r r r R     chegar
+    # y=7  r . . . . .
+    # y=6  r . . . . .
+    state = make_game(snake(EU, BOLSAO_EU), others=[snake("rival", BOLSAO_RIVAL)])
+    f = medir(state, ["down", "left"])
+    assert (f["left"].area, f["left"].roomy) == (2, False)
+    assert f["down"].roomy is True
 
 
 def test_danger_com_rival_igual_a_duas_casas():
@@ -379,16 +402,32 @@ def test_decisao_nao_importa_models():
 
 # --- Cenários de get_move ---
 
-def test_beco_versus_cabeca_a_cabeca():
+def test_persegue_a_propria_cauda():
     #   x: 0 1 2
     # y=4  r . .
-    # y=3  R . .      up é arriscada (a rival maior alcança (0,2)), mas leva
-    # y=2  . . .      ao resto do tabuleiro; down é segura e dá num bolsão de
-    # y=1  E e e      2 casas, menor que a cobra
+    # y=3  R . .      up é arriscada (a rival maior alcança (0,2)); down é
+    # y=2  . . .      segura e tem espaço, porque a cobra sai perseguindo a
+    # y=1  E e e      própria cauda por (1,0) e (2,0)
     # y=0  . e e
     eu = snake(EU, [(0, 1), (1, 1), (2, 1), (2, 0), (1, 0)])
     maior = snake("maior", [(0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8)])
-    assert get_move(make_game(eu, others=[maior])).move == "up"
+    assert get_move(make_game(eu, others=[maior])).move == "down"
+
+
+def test_beco_versus_cabeca_a_cabeca():
+    #   x: 0 1 2 3 4 5
+    # y=10 . . E e e e     left é segura, mas dá num bolsão de 2 casas:
+    # y=9  r r . . . .     (1,9) e (0,9) só liberam em 6 e 5 movimentos.
+    # y=8  r r R . . .     down é arriscada (a rival maior alcança (2,9)),
+    # y=7  r . . . . .     mas leva ao resto do tabuleiro
+    # y=6  r . . . . .
+    # y=5  r . . . . .
+    maior = snake("maior", [(2, 8), (1, 8), (1, 9), (0, 9), (0, 8), (0, 7), (0, 6), (0, 5)])
+    state = make_game(snake(EU, BOLSAO_EU), others=[maior])
+    f = medir(state, ["down", "left"])
+    assert (f["left"].risky, f["left"].roomy) == (False, False)
+    assert (f["down"].risky, f["down"].roomy) == (True, True)
+    assert get_move(state).move == "down"
 
 
 def test_nao_morde_a_isca():

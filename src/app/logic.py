@@ -13,11 +13,14 @@
 # Documentação: https://docs.battlesnake.com
 
 import random
-from . import telemetry
+from collections import Counter
+
+from . import board_state, clock, config, search, telemetry
+from .board_state import hazard_damage
 from .models import GameState, MoveResponse
 from .grid import pos, step, opponent_cells, tail_moves
 from .features import snapshot, build_context, evaluate_moves
-from .decision import decide
+from .decision import explain
 
 
 def info() -> dict:
@@ -45,13 +48,20 @@ def end(state: GameState) -> None:
     """POST /end — chamado uma vez, quando a partida termina."""
 
 
-def get_move(state: GameState) -> MoveResponse:
+def get_move(state: GameState, started_at: float | None = None) -> MoveResponse:
     """POST /move — chamado a cada turno. Aqui mora a inteligência da sua cobra.
     Precisa devolver "up", "down", "left" ou "right".
     Exemplo do JSON recebido: https://docs.battlesnake.com/api/example-move
 
+    started_at é o instante de chegada do /move (clock.now(), marcado no
+    middleware de main.py); sem ele, o prazo começa agora.
+
     Emite um evento move por chamada (docs/logs.md).
     """
+    if started_at is None:
+        started_at = clock.now()
+    deadline = clock.Deadline(started_at, clock.budget_ms(state.game.timeout))
+
     is_move_safe: dict[str, bool] = {
         "up": True,
         "down": True,
@@ -119,6 +129,22 @@ def get_move(state: GameState) -> MoveResponse:
         if is_move_safe[direction] and step(head, direction) in rivals:
             is_move_safe[direction] = False
 
+    # 5. Impedir que a cobra morra de fome ou num hazard. As regras oficiais
+    # do modo standard rodam nesta ordem: movimento, perda de 1 de vida,
+    # dano de hazard (que não vale numa casa com comida), alimentação e só
+    # então as eliminações. Então, sem comida no destino, a vida que sobra é
+    # vida - 1 - dano × (vezes que a casa aparece na lista de hazards).
+    # https://github.com/BattlesnakeOfficial/rules/blob/main/standard.go
+    damage = hazard_damage(state.game.ruleset)
+    food = {pos(f) for f in state.board.food}
+    hazards = Counter(pos(h) for h in state.board.hazards)
+    for direction in is_move_safe:
+        target = step(head, direction)
+        if not is_move_safe[direction] or target in food:
+            continue
+        if state.you.health - 1 - damage * hazards[target] <= 0:
+            is_move_safe[direction] = False
+
     # O cabeça a cabeça com rival maior ou igual não elimina a direção: ele
     # só a marca como arriscada (MoveFeatures.risky), e a decisão prefere as
     # não arriscadas. Um cabeça a cabeça incerto é melhor que um beco certo.
@@ -133,19 +159,42 @@ def get_move(state: GameState) -> MoveResponse:
         move = random.choice(all_moves)
     else:
         # Escolhe, entre as direções seguras, a melhor segundo a estratégia.
-        move = choose_move(state, safe_moves)
+        move = choose_move(state, safe_moves, deadline=deadline)
 
     telemetry.log_move(state, move)
     return MoveResponse(move=move)
 
 
-def choose_move(state: GameState, safe_moves: list[str]) -> str:
+def choose_move(
+    state: GameState,
+    safe_moves: list[str],
+    deadline: clock.Deadline | None = None,
+) -> str:
     """Escolhe uma direção dentre safe_moves (que nunca chega vazia).
 
     Três etapas: safe_moves são as candidatas, evaluate_moves mede cada uma e
-    decide escolhe só a partir dessas medições e do contexto.
+    explain (a decide com o porquê) escolhe só a partir dessas medições e do
+    contexto. Essa escolha heurística fica pronta primeiro. Depois, num
+    duelo e se o prazo ainda não passou, a busca pode substituí-la, mas só
+    com o resultado de uma profundidade que terminou dentro do prazo.
     """
-    snap = snapshot(state)
+    if deadline is None:
+        deadline = clock.Deadline(clock.now(), clock.budget_ms(state.game.timeout))
+    board = board_state.from_game(state)
+    snap = snapshot(state, board)
     ctx = build_context(state, snap)
-    features = evaluate_moves(state, safe_moves, snap)
-    return decide(features, ctx)
+    features = evaluate_moves(state, safe_moves, snap, deadline)
+    decision = explain(features, ctx)
+
+    rivals = [s for s in board.snakes if s.id != state.you.id and s.alive]
+    if (
+        config.MAX_SEARCH_DEPTH > 0
+        and len(safe_moves) > 1
+        and len(rivals) == 1
+        and not deadline.expired()
+    ):
+        root_order = [r.move for r in decision.ranking]
+        found = search.best_move(board, state.you.id, rivals[0].id, root_order, deadline)
+        if found is not None:
+            return found
+    return decision.move

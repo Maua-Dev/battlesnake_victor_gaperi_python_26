@@ -78,6 +78,9 @@ MEDICOES = [
     [feat("up", center_dist=8), feat("down", center_dist=2)],
     [feat("right", territory_pct=33.333333333333336, center_dist=4),
      feat("up", territory_pct=12.1, danger=True, hunt_step=True)],
+    [feat("up", survival_depth=5, hazard=True, rival_territory_pct=40.0, territory_pct=60.0),
+     feat("down", survival_depth=3, territory_pct=20.0),
+     feat("left", survival_depth=5, survives=False, rival_territory_pct=12.5)],
 ]
 
 
