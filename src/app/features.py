@@ -116,17 +116,27 @@ def behind_schedule(length: int, turn: int) -> bool:
     return length < config.START_LENGTH + turn // config.FEED_INTERVAL
 
 
+def hunger_reasons(state: GameState, snap: TurnSnapshot | None = None) -> list[str]:
+    """Os critérios de fome que dispararam nesta jogada; vazia é sem fome."""
+    snap = snap or snapshot(state)
+    you = state.you
+    criteria = {
+        "starving": starving(you.health, snap.target),
+        "outsized": outsized(you.length, snap.rivals),
+        "behind_schedule": behind_schedule(you.length, state.turn),
+    }
+    return [name for name, hit in criteria.items() if hit]
+
+
 def build_context(state: GameState, snap: TurnSnapshot | None = None) -> DecisionContext:
     """Contexto da jogada para a decisão: vida, tamanho, turno e fome."""
     snap = snap or snapshot(state)
     you = state.you
-    hungry = (
-        starving(you.health, snap.target)
-        or outsized(you.length, snap.rivals)
-        or behind_schedule(you.length, state.turn)
-    )
     return DecisionContext(
-        health=you.health, length=you.length, turn=state.turn, hungry=hungry
+        health=you.health,
+        length=you.length,
+        turn=state.turn,
+        hungry=bool(hunger_reasons(state, snap)),
     )
 
 

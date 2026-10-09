@@ -13,16 +13,13 @@
 # Documentação: https://docs.battlesnake.com
 
 import random
-import logging
+import time
+from dataclasses import dataclass
+from . import telemetry
 from .models import GameState, MoveResponse
 from .grid import pos, step, opponent_cells, tail_moves
-from .features import snapshot, build_context, evaluate_moves
-from .decision import decide
-
-logger = logging.getLogger(__name__)
-# O runtime Python da Lambda deixa o logger raiz em WARNING: sem esta linha
-# as jogadas nao aparecem no CloudWatch.
-logger.setLevel(logging.INFO)
+from .features import FoodTarget, snapshot, build_context, evaluate_moves, hunger_reasons
+from .decision import Decision, DecisionContext, MoveFeatures, explain
 
 
 def info() -> dict:
@@ -30,8 +27,6 @@ def info() -> dict:
     Controla a aparência dela.
     Opções de cabeça, cauda e cor: https://docs.battlesnake.com/guides/customizations
     """
-    logger.info("INFO")
-
     return {
         "apiversion": "1",
         "author": "gasperi",
@@ -46,25 +41,43 @@ def start(state: GameState) -> None:
     """POST /start — chamado uma vez, quando a partida começa.
     Bom lugar para preparar qualquer estado inicial.
     """
-    logger.info("JOGO COMEÇOU (partida %s)", state.game.id)
+    telemetry.emit("start", telemetry.start_fields, state)
 
 
 def end(state: GameState) -> None:
     """POST /end — chamado uma vez, quando a partida termina."""
-    logger.info("FIM DE JOGO após %d turnos", state.turn)
+    telemetry.emit("end", telemetry.end_fields, state)
+
+
+def mark_unsafe(
+    is_move_safe: dict[str, bool],
+    reasons: dict[str, list[str]],
+    direction: str,
+    reason: str,
+) -> None:
+    """Marca a direção como insegura e registra o motivo, sem repetir."""
+    is_move_safe[direction] = False
+    if reason not in reasons[direction]:
+        reasons[direction].append(reason)
 
 
 def get_move(state: GameState) -> MoveResponse:
     """POST /move — chamado a cada turno. Aqui mora a inteligência da sua cobra.
     Precisa devolver "up", "down", "left" ou "right".
     Exemplo do JSON recebido: https://docs.battlesnake.com/api/example-move
+
+    Emite um evento move por chamada, explicando a escolha (docs/logs.md).
     """
+    started = time.perf_counter()
     is_move_safe: dict[str, bool] = {
         "up": True,
         "down": True,
         "left": True,
         "right": True,
     }
+    # Por que cada direção caiu, na ordem dos blocos abaixo (blocked_by do
+    # evento move).
+    reasons: dict[str, list[str]] = {direction: [] for direction in is_move_safe}
 
     # --- Impedir que a cobra ande para trás (já implementado) ---
     # O pescoço é a parte do corpo logo atrás da cabeça. Voltar por cima dele
@@ -75,29 +88,29 @@ def get_move(state: GameState) -> MoveResponse:
     if my_neck is not None:
         if my_neck.x < my_head.x:
             # pescoço à esquerda da cabeça -> não vá para a esquerda
-            is_move_safe["left"] = False
+            mark_unsafe(is_move_safe, reasons, "left", "neck")
         elif my_neck.x > my_head.x:
             # pescoço à direita da cabeça -> não vá para a direita
-            is_move_safe["right"] = False
+            mark_unsafe(is_move_safe, reasons, "right", "neck")
         elif my_neck.y < my_head.y:
             # pescoço abaixo da cabeça -> não desça
-            is_move_safe["down"] = False
+            mark_unsafe(is_move_safe, reasons, "down", "neck")
         elif my_neck.y > my_head.y:
             # pescoço acima da cabeça -> não suba
-            is_move_safe["up"] = False
+            mark_unsafe(is_move_safe, reasons, "up", "neck")
 
     # 2. Impedir que a cobra saia do tabuleiro (paredes)
     board_width = state.board.width
     board_height = state.board.height
 
     if my_head.x + 1 >= board_width:
-        is_move_safe["right"] = False
+        mark_unsafe(is_move_safe, reasons, "right", "wall")
     if my_head.x - 1 < 0:
-        is_move_safe["left"] = False
+        mark_unsafe(is_move_safe, reasons, "left", "wall")
     if my_head.y + 1 >= board_height:
-        is_move_safe["up"] = False
+        mark_unsafe(is_move_safe, reasons, "up", "wall")
     if my_head.y - 1 < 0:
-        is_move_safe["down"] = False
+        mark_unsafe(is_move_safe, reasons, "down", "wall")
 
     # 3. Impedir que a cobra bata no próprio corpo
     my_body = state.you.body
@@ -110,13 +123,13 @@ def get_move(state: GameState) -> MoveResponse:
         if free_tail and segment == my_tail:
             continue
         if segment.x == my_head.x + 1 and segment.y == my_head.y:
-            is_move_safe["right"] = False
+            mark_unsafe(is_move_safe, reasons, "right", "self")
         if segment.x == my_head.x - 1 and segment.y == my_head.y:
-            is_move_safe["left"] = False
+            mark_unsafe(is_move_safe, reasons, "left", "self")
         if segment.x == my_head.x and segment.y == my_head.y + 1:
-            is_move_safe["up"] = False
+            mark_unsafe(is_move_safe, reasons, "up", "self")
         if segment.x == my_head.x and segment.y == my_head.y - 1:
-            is_move_safe["down"] = False
+            mark_unsafe(is_move_safe, reasons, "down", "self")
 
     # 4. Impedir que a cobra bata nas adversárias (a cauda delas continua
     # bloqueada: se a rival comer neste turno, a cauda não sai do lugar)
@@ -124,7 +137,7 @@ def get_move(state: GameState) -> MoveResponse:
     rivals = opponent_cells(state.board, state.you)
     for direction in is_move_safe:
         if is_move_safe[direction] and step(head, direction) in rivals:
-            is_move_safe[direction] = False
+            mark_unsafe(is_move_safe, reasons, direction, "opponent")
 
     # O cabeça a cabeça com rival maior ou igual não elimina a direção: ele
     # só a marca como arriscada (MoveFeatures.risky), e a decisão prefere as
@@ -138,24 +151,50 @@ def get_move(state: GameState) -> MoveResponse:
         # Escolhemos uma ao acaso entre as 4 — melhor do que travar.
         all_moves = ["up", "down", "left", "right"]
         fallback = random.choice(all_moves)
-        logger.info("MOVE %d: sem saída! emergência -> %s", state.turn, fallback)
+        logic_ms = round((time.perf_counter() - started) * 1000, 2)
+        telemetry.emit(
+            "move", telemetry.move_fields,
+            state, reasons, safe_moves, None, fallback, "emergency", logic_ms,
+        )
         return MoveResponse(move=fallback)
 
     # Escolhe, entre as direções seguras, a melhor segundo a estratégia.
-    chosen = choose_move(state, safe_moves)
+    choice = choose_move(state, safe_moves)
+    chosen = choice.decision.move
 
-    logger.debug("MOVE %d: %s", state.turn, chosen)
+    logic_ms = round((time.perf_counter() - started) * 1000, 2)
+    telemetry.emit(
+        "move", telemetry.move_fields,
+        state, reasons, safe_moves, choice, chosen, choice.decision.reason, logic_ms,
+    )
     return MoveResponse(move=chosen)
 
 
-def choose_move(state: GameState, safe_moves: list[str]) -> str:
+@dataclass(frozen=True)
+class MoveChoice:
+    """O rastro da escolha: o que foi medido e por que a decisão escolheu."""
+    context: DecisionContext
+    hunger_reasons: list[str]
+    features: list[MoveFeatures]
+    # A comida alvo do turno (com o caminho A* da cabeça atual), ou None.
+    target: FoodTarget | None
+    decision: Decision
+
+
+def choose_move(state: GameState, safe_moves: list[str]) -> MoveChoice:
     """Escolhe uma direção dentre safe_moves (que nunca chega vazia).
 
     Três etapas: safe_moves são as candidatas, evaluate_moves mede cada uma e
-    decide escolhe só a partir dessas medições e do contexto.
+    a decisão escolhe só a partir dessas medições e do contexto. explain é a
+    própria decide, devolvendo também o porquê.
     """
     snap = snapshot(state)
     ctx = build_context(state, snap)
     features = evaluate_moves(state, safe_moves, snap)
-    logger.debug("MOVE %d: %s %s", state.turn, ctx, features)
-    return decide(features, ctx)
+    return MoveChoice(
+        context=ctx,
+        hunger_reasons=hunger_reasons(state, snap),
+        features=features,
+        target=snap.target,
+        decision=explain(features, ctx),
+    )
