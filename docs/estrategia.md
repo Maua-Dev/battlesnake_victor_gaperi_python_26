@@ -14,7 +14,7 @@ Como a cobra escolhe cada jogada, o que ela mede, onde estão os pesos e quais a
              ─► resposta
 ```
 
-1. **Filtro** (`logic.get_move`). Tira as direções que matam com certeza: o pescoço, as paredes, o próprio corpo (a cauda conta como livre se não estiver empilhada), o corpo das adversárias (a cauda delas inclusive, veja "Diferenças em relação às regras") e as casas em que a vida chegaria a 0. Sem nenhuma candidata, a cobra sorteia uma das quatro direções. É a única aleatoriedade.
+1. **Filtro** (`logic.get_move`). Tira as direções que matam com certeza: o pescoço, as paredes, os corpos e as casas em que a vida chegaria a 0. Um corpo, o próprio ou o de uma adversária, ocupa todas as casas menos a da cauda: a cauda sai do lugar mesmo que a cobra coma, porque o movimento vem antes da alimentação. A exceção é a cauda empilhada logo depois de comer, que continua ocupada. É a mesma regra do simulador da busca (`simulator.occupied_after_turn`), e `logic.filter_moves` devolve o motivo de cada direção eliminada. Sem nenhuma candidata, a cobra sorteia uma das quatro direções. É a única aleatoriedade.
 2. **Heurística**. `features.evaluate_moves` mede cada candidata, e `decision.explain` escolhe a partir dessas medições e do contexto (vida, tamanho, turno e fome). A escolha heurística fica pronta antes de qualquer busca.
 3. **Busca no duelo** (`search.best_move`). Roda só quando há exatamente uma adversária viva, mais de uma candidata, `MAX_SEARCH_DEPTH > 0` e o prazo ainda não passou. Ela só **veta** a escolha heurística: troca-a apenas quando ela perde ou empata dentro do horizonte da busca e outro movimento vale mais, e só com o resultado de uma profundidade que terminou dentro do prazo.
 
@@ -132,7 +132,7 @@ score = W_TERRITORY (1.0)  × territory_pct
 
 ## Diferenças em relação às regras
 
-O filtro trata a cauda das adversárias como ocupada. Pelas regras oficiais, a cauda que não está empilhada sempre sai do lugar, mesmo que a rival coma, porque o movimento vem antes da alimentação. O filtro é mais conservador de propósito. O simulador da busca segue as regras à risca.
+Nenhuma na ocupação: o filtro, a DFS de sobrevivência e o simulador da busca tratam as caudas como as regras oficiais. Uma cauda que não está empilhada sai do lugar, mesmo que a cobra coma. Uma cauda empilhada continua ocupada. Até a partida `dc8c4f05-84ac-4554-98f6-94b22d5a8b4d`, o filtro tratava a cauda das adversárias como ocupada. No turno 74 ele vetou a única saída, que a DFS e a busca davam como válida, e a cobra morreu três turnos depois. O teste `tests/app/test_equivalencia_filtro.py` garante que o filtro e o simulador não divergem de novo. A simulação não gera comida, e isso está em "Aproximações".
 
 ## Calibrar o orçamento
 
@@ -145,3 +145,33 @@ Para calibrar `SEARCH_BUDGET_MAX_MS`:
 4. Se houver estouro, reduza `SEARCH_BUDGET_MAX_MS` antes de avaliar a estratégia. Se a fase heurística sozinha já passar do orçamento com 8 cobras, o próximo passo é cortar medições.
 
 `SEARCH_BUDGET_MAX_MS` pode vir da variável de ambiente de mesmo nome. Um valor ausente, vazio, não inteiro ou não positivo vale o padrão do código (120), sem erro. A IaC não define essa variável. **Uma variável definida à mão no console da Lambda pode sumir no próximo `cdk deploy`.** Para uma mudança duradoura, altere o padrão em `config.py`.
+
+## Analisar uma partida
+
+`scripts/replay.py` baixa uma partida da Arena e roda a lógica da cobra em cada turno, para comparar com o que ela jogou em produção. Rode da raiz do repositório, com o `.venv`:
+
+```bash
+python scripts/replay.py <game_id> [--engine https://arena.devmaua.com/api] [--snake ID_OU_NOME] \
+    [--turns 70-76] [--budget-ms 120] [--deep-budget-ms 5000]
+```
+
+- `<game_id>` é o id que aparece na URL da partida na Arena.
+- Sem `--snake`, a cobra analisada é a única em que o `author` de `info()` (`gasperi`) aparece no autor ou no nome, sem diferenciar maiúsculas de minúsculas. Se nenhuma ou mais de uma bater, a ferramenta lista as cobras e pede `--snake`, que aceita o id ou o nome exato.
+- Sem `--turns`, a ferramenta analisa os 8 turnos antes da morte da cobra ou, se ela não morreu, os 8 últimos da partida. `--turns 74` analisa um turno só.
+- Ela escreve só no terminal e não grava nada. O log de produção da cobra fica desligado durante a análise. É uma ferramenta local: fica fora de `src/`, não entra no pacote da Lambda e usa só a biblioteca padrão (mais o `certifi` de `requirements-dev.txt`, quando instalado, para os certificados TLS).
+
+Para cada turno, o relatório mostra:
+1. **Cabeçalho**: turno, vida, tamanho e adversárias vivas. Quando a direção jogada difere da escolha local, ele leva `<<< DIVERGE: jogada X, local Y >>>`, e o resumo no fim lista esses turnos. Um turno sem candidatas não conta como divergente, porque nele `get_move` sorteia.
+2. **Tabuleiro** em ASCII, com y crescendo para cima e a legenda dos testes: `E`/`e`/`t` para a cabeça, o corpo e a cauda da cobra, `R`/`r` para as adversárias, `*` comida e `h` hazard.
+3. **Jogada e latência**. A direção jogada no turno T é a diferença entre a cabeça no frame T e no frame T+1. A latência é o `Latency` do frame T+1, que é o frame produzido pela resposta àquele `/move`. Sem o frame seguinte, as duas aparecem como desconhecidas.
+4. **Candidatas** do filtro (`logic.filter_moves`) e o motivo de cada direção eliminada: `neck`, `wall`, `body` ou `health`.
+5. **Medições** com o prazo de `--deep-budget-ms`. Para cada candidata, na ordem da decisão: a camada, a nota, as parcelas diferentes de 0, `area`, `survival` (profundidade alcançada sobre a alvo), `survives`, `roomy`, `risky` e `kill_chance`. Vêm também a escolha heurística e o motivo dela (`only_option`, `layer`, `score` ou `tie`).
+6. **`get_move`** com o orçamento de produção. O teto vem de `--budget-ms`, e o orçamento efetivo é `min(0,4 × 500, --budget-ms)`, como na Lambda.
+7. **Busca**, só num duelo com mais de uma candidata. Mostra o valor de cada candidata em cada profundidade, até a última que terminou dentro de `--deep-budget-ms`. `VENCE em k` e `PERDE em k` marcam um fim de jogo em k turnos, e `EMPATE` marca a morte das duas cobras. A busca da cobra só troca a escolha heurística quando ela perde ou empata (ver "Busca no duelo").
+
+Premissas e limites:
+- A Arena não informa as regras da partida. O estado convertido usa timeout de 500 ms e o ruleset `standard` sem `settings`, então o dano de hazard fica 0. Quando o frame tem hazards, o relatório avisa.
+- **A CPU local é muito mais rápida que a da Lambda** (ver "Calibrar o orçamento"). Com `--budget-ms 120`, a escolha local pode diferir da de produção só porque a DFS e a busca foram mais fundo. Para imitar a Lambda, repita com orçamentos menores, por exemplo `--budget-ms 10` ou `--budget-ms 3`. Se a escolha local não muda nem assim, a causa provável é outra, como uma versão implantada diferente do código atual.
+- A análise profunda gasta até `--deep-budget-ms` nas medições e o mesmo na busca, em cada turno. Com o padrão, 5 turnos de duelo levam cerca de 20 s.
+
+Exemplo: `python scripts/replay.py dc8c4f05-84ac-4554-98f6-94b22d5a8b4d --turns 72-76`. No turno 74 dessa partida, as candidatas são `left` e `right`. A busca mostra `left: PERDE em 3`, e a escolha local é `right`. Em produção, antes da correção da cauda das adversárias no filtro, a cobra jogou `left` e morreu no turno 77.
