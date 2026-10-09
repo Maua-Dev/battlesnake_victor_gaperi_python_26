@@ -28,12 +28,22 @@ def make_game(
     width: int = 11,
     height: int = 11,
     turn: int = 1,
+    hazards=(),
+    hazard_damage: int | None = None,
 ) -> GameState:
-    """Monta o estado do /move com `you` em board.snakes, seguido de `others`."""
+    """Monta o estado do /move com `you` em board.snakes, seguido de `others`.
+
+    `hazards` aceita casas repetidas (hazards empilhados). Com `hazard_damage`,
+    o dano vai para ruleset.settings.hazardDamagePerTurn, como nas regras
+    oficiais; sem ele, o ruleset fica sem settings.
+    """
+    ruleset = {"name": "standard", "version": "v1.2.3"}
+    if hazard_damage is not None:
+        ruleset["settings"] = {"hazardDamagePerTurn": hazard_damage}
     return GameState.model_validate({
         "game": {
             "id": "partida-de-teste",
-            "ruleset": {"name": "standard", "version": "v1.2.3"},
+            "ruleset": ruleset,
             "map": "standard",
             "timeout": 500,
         },
@@ -42,7 +52,7 @@ def make_game(
             "height": height,
             "width": width,
             "food": [{"x": x, "y": y} for x, y in food],
-            "hazards": [],
+            "hazards": [{"x": x, "y": y} for x, y in hazards],
             "snakes": [you, *others],
         },
         "you": you,
