@@ -36,67 +36,67 @@
 
 ## 5. Testes de explain num arquivo próprio (Parte 2)
 
-- [ ] 5.1 Criar `tests/app/test_explicacao.py` com a seção "Explicação da decisão" de `test_telemetry.py` copiada sem mudar o conteúdo: `COM_FOME`, `SEM_FOME`, `feat`, `por_move`, `MEDICOES` e todos os `test_explain_*`. Os imports ficam no topo.
-- [ ] 5.2 Apagar essa seção de `test_telemetry.py` e rodar `pytest tests/app/test_explicacao.py`, confirmando que tem a mesma contagem de testes de antes.
+- [x] 5.1 Criar `tests/app/test_explicacao.py` com a seção "Explicação da decisão" de `test_telemetry.py` copiada sem mudar o conteúdo: `COM_FOME`, `SEM_FOME`, `feat`, `por_move`, `MEDICOES` e todos os `test_explain_*`. Os imports ficam no topo.
+- [x] 5.2 Apagar essa seção de `test_telemetry.py` e rodar `pytest tests/app/test_explicacao.py`, confirmando que tem a mesma contagem de testes de antes.
 
 ## 6. Enxugar telemetry.py e main.py (Parte 2)
 
-- [ ] 6.1 Reescrever `src/app/telemetry.py` (design, decisão 4):
+- [x] 6.1 Reescrever `src/app/telemetry.py` (design, decisão 4):
   - mantém o logger dedicado e `log_event`, sem campos comuns;
   - ganha `timed_out_last_turn(snake, timeout)`, `log_move(state, move)`, `log_error`, que completa `game_id`/`turn` com `None`, e `report_errors(path, state)`;
   - mantém `validation_error_fields`;
   - remove `COMMON_FIELDS`, `FEATURE_FIELDS`, `SLOW_MS`, `_env_int`, o `ContextVar`, `new_request_context`, `end_request_context`, `bind_game`, `remaining_ms`, `_now`, `emit` e os builders de `start`, `end` e `move`;
   - atualiza a docstring do módulo.
-- [ ] 6.2 Em `src/app/main.py`, remover `request_telemetry`, `_cold_start` e `import time`, trocar `bind_game` + `report_errors(path)` por `report_errors(path, state)` nas três rotas, e manter `strip_stage_prefix`, `remove_stage_prefix` e `log_validation_error`.
+- [x] 6.2 Em `src/app/main.py`, remover `request_telemetry`, `_cold_start` e `import time`, trocar `bind_game` + `report_errors(path)` por `report_errors(path, state)` nas três rotas, e manter `strip_stage_prefix`, `remove_stage_prefix` e `log_validation_error`.
 
 ## 7. Simplificar logic.py (Parte 2)
 
-- [ ] 7.1 Remover `mark_unsafe` e o dict `reasons`, e fazer os blocos do template voltarem a `is_move_safe["<direção>"] = False`, com os mesmos comentários.
-- [ ] 7.2 Fazer a emergência e o caminho normal atribuírem `move`, com uma única chamada a `telemetry.log_move(state, move)` antes do `return MoveResponse(move=move)` (design, decisão 5). Remover a medição de `logic_ms`.
-- [ ] 7.3 Remover `MoveChoice` e fazer `choose_move` devolver `str` via `decide(features, ctx)`. Deixar `start` e `end` só com a docstring, limpar os imports que sobraram e atualizar a docstring de `get_move`.
-- [ ] 7.4 Rodar `test_logic.py`, `test_app.py`, `test_lambda.py` e as suítes de estratégia e confirmar que estão verdes sem alteração. Rodar também `grep -rn "from src" src/app` e confirmar que a saída é vazia.
+- [x] 7.1 Remover `mark_unsafe` e o dict `reasons`, e fazer os blocos do template voltarem a `is_move_safe["<direção>"] = False`, com os mesmos comentários.
+- [x] 7.2 Fazer a emergência e o caminho normal atribuírem `move`, com uma única chamada a `telemetry.log_move(state, move)` antes do `return MoveResponse(move=move)` (design, decisão 5). Remover a medição de `logic_ms`.
+- [x] 7.3 Remover `MoveChoice` e fazer `choose_move` devolver `str` via `decide(features, ctx)`. Deixar `start` e `end` só com a docstring, limpar os imports que sobraram e atualizar a docstring de `get_move`.
+- [x] 7.4 Rodar `test_logic.py`, `test_app.py`, `test_lambda.py` e as suítes de estratégia e confirmar que estão verdes sem alteração. Rodar também `grep -rn "from src" src/app` e confirmar que a saída é vazia.
 
 ## 8. Reescrever test_telemetry.py (Parte 2)
 
-- [ ] 8.1 Testes de formato com `log_event`:
+- [x] 8.1 Testes de formato com `log_event`:
   - toda linha é um objeto JSON;
   - não há duplicação (`propagate` é `False`);
   - texto não ASCII sai literal;
   - com nível `ERROR`, só o `error` sai;
   - um campo não serializável não lança;
   - uma falha de serialização vira um `error`.
-- [ ] 8.2 Testes do evento `move`:
+- [x] 8.2 Testes do evento `move`:
   - tem exatamente os 5 campos, com `game_id` e `turn` do payload e `move` igual à resposta;
   - também sai na emergência;
   - turno 0 com o corpo empilhado;
   - não tem os campos removidos (cenários "Movimento observado" e "Comida alvo com fome");
   - `POST /move` via HTTP produz exatamente uma linha, o `move`;
   - `POST /start` e `POST /end` não produzem nenhuma linha.
-- [ ] 8.3 Testes de `timed_out_last_turn` com timeout 500: `"500"` e `"750"` dão `true`; `"499"`, `"123"`, ausente, `""` e `"abc"` dão `false`.
-- [ ] 8.4 "Logs não mudam a decisão": copiar os cenários de resposta única que já existem e rodar cada um com o logger em `CRITICAL` e em `DEBUG`.
-- [ ] 8.5 Testes de `error`:
+- [x] 8.3 Testes de `timed_out_last_turn` com timeout 500: `"500"` e `"750"` dão `true`; `"499"`, `"123"`, ausente, `""` e `"abc"` dão `false`.
+- [x] 8.4 "Logs não mudam a decisão": copiar os cenários de resposta única que já existem e rodar cada um com o logger em `CRITICAL` e em `DEBUG`.
+- [x] 8.5 Testes de `error`:
   - uma exceção forçada em `choose_move` gera um `error` com `path`, `exception`, `message`, `traceback`, `game_id` e `turn`, sem outros campos, e a exceção é relançada;
   - um payload sem `you` gera um `error` com `message` `"body.you: missing"` e o mesmo 422 do FastAPI puro;
   - um corpo que não é JSON gera um `error` com `game_id` nulo.
-- [ ] 8.6 Teste "sem segredos": o cabeçalho `Authorization` e a query string não aparecem na saída.
-- [ ] 8.7 Rodar o `pytest` completo e confirmar que está verde.
+- [x] 8.6 Teste "sem segredos": o cabeçalho `Authorization` e a query string não aparecem na saída.
+- [x] 8.7 Rodar o `pytest` completo e confirmar que está verde.
 
 ## 9. docs/logs.md
 
-- [ ] 9.1 Reescrever `docs/logs.md` como um documento curto, com:
+- [x] 9.1 Reescrever `docs/logs.md` como um documento curto, com:
   - os eventos `move` e `error` e seus campos;
   - `LOG_LEVEL`;
   - o grupo de logs.
-- [ ] 9.2 Incluir as quatro consultas, cada uma com uma linha de explicação:
+- [x] 9.2 Incluir as quatro consultas, cada uma com uma linha de explicação:
   - a partida: `fields turn, move, timed_out_last_turn | filter event = "move" and game_id = "<id>" | sort turn asc`;
   - os turnos que estouraram o tempo: `fields game_id, turn, move | filter event = "move" and timed_out_last_turn = 1 | sort @timestamp desc`;
   - os erros: `fields path, exception, message, game_id, turn | filter event = "error" | sort @timestamp desc`;
   - a duração da Lambda pelas linhas `REPORT`: `filter @type = "REPORT" | stats avg(@duration), max(@duration), pct(@duration, 95) by bin(5m)`.
-- [ ] 9.3 Incluir o aviso de que a sintaxe do filtro booleano (`timed_out_last_turn = 1`) precisa ser conferida contra logs reais.
+- [x] 9.3 Incluir o aviso de que a sintaxe do filtro booleano (`timed_out_last_turn = 1`) precisa ser conferida contra logs reais.
 
 ## 10. Fechamento
 
-- [ ] 10.1 Rodar o `pytest` completo e confirmar que está verde. Rodar `git diff --stat` e confirmar que `test_estrategia.py`, `test_estrategia_v2.py`, `test_logic.py`, `test_app.py`, `test_lambda.py`, `iac/` e `.github/` não mudaram.
+- [x] 10.1 Rodar o `pytest` completo e confirmar que está verde. Rodar `git diff --stat` e confirmar que `test_estrategia.py`, `test_estrategia_v2.py`, `test_logic.py`, `test_app.py`, `test_lambda.py`, `iac/` e `.github/` não mudaram.
 - [ ] 10.2 Depois do deploy na `dev`, numa partida de 8 cobras na Arena, conferir:
   - exatamente uma linha `move` por turno no CloudWatch;
   - a consulta de `REPORT` com a duração média bem abaixo dos 155 a 525 ms de antes;
