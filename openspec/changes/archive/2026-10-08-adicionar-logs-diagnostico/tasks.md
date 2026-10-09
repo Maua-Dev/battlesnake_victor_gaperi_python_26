@@ -149,5 +149,5 @@ Os testes novos vão em `tests/app/test_telemetry.py`, importando de `src.app.*`
 
 ## 11. Validação depois do deploy
 
-- [ ] 11.1 Depois do deploy na `dev`, jogar uma partida na Arena e conferir no Logs Insights: um `start`, um `move` por turno, um `end` e um `request` por chamada, todos como JSON puro com os campos descobertos sem `parse`.
-- [ ] 11.2 Rodar as sete consultas, registrar em `docs/logs.md` a sintaxe de filtro booleano que funcionou e remover a marcação "a validar".
+- [x] 11.1 Depois do deploy na `dev`, jogar uma partida na Arena e conferir no Logs Insights: um `start`, um `move` por turno, um `end` e um `request` por chamada, todos como JSON puro com os campos descobertos sem `parse`. Substituída por `enxugar-logs-e-otimizar-encurraladas`: os eventos `start`, `end` e `request` e as sete consultas deixam de existir.
+- [x] 11.2 Rodar as sete consultas, registrar em `docs/logs.md` a sintaxe de filtro booleano que funcionou e remover a marcação "a validar". Substituída por `enxugar-logs-e-otimizar-encurraladas`: os eventos `start`, `end` e `request` e as sete consultas deixam de existir.
