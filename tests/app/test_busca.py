@@ -135,6 +135,21 @@ def test_poda_nao_muda_o_valor():
     assert casos == 60
 
 
+# --- Valor com prazo (para scripts/replay.py) ---
+
+def test_minimax_com_prazo_folgado_da_o_mesmo_valor(relogio_parado):
+    for state in duelos_aleatorios(10, semente=7):
+        board = from_game(state)
+        sem_prazo = minimax_value(board, EU, RIVAL, 2)
+        assert minimax_value(board, EU, RIVAL, 2, deadline=Deadline(0.0, 120)) == sem_prazo
+
+
+def test_minimax_com_prazo_que_estoura_devolve_none(relogio_que_estoura_em):
+    board = from_game(duelo(**MEIO_DE_JOGO))
+    relogio_que_estoura_em(5)
+    assert minimax_value(board, EU, RIVAL, 3, deadline=Deadline(0.0, 120)) is None
+
+
 # --- Cenas ---
 
 COLISAO = dict(

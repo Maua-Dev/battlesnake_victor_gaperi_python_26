@@ -1,0 +1,312 @@
+{
+ "game": {
+  "Game": {
+   "ID": "dc8c4f05-84ac-4554-98f6-94b22d5a8b4d",
+   "Status": "complete",
+   "Width": 11,
+   "Height": 11
+  }
+ },
+ "frames": [
+  {
+   "Food": [
+    {
+     "X": 1,
+     "Y": 9
+    },
+    {
+     "X": 10,
+     "Y": 4
+    },
+    {
+     "X": 7,
+     "Y": 2
+    }
+   ],
+   "Hazards": [],
+   "Snakes": [
+    {
+     "APIVersion": "1",
+     "Author": "autor-a",
+     "Body": [
+      {
+       "X": 5,
+       "Y": 3
+      },
+      {
+       "X": 5,
+       "Y": 4
+      },
+      {
+       "X": 4,
+       "Y": 4
+      }
+     ],
+     "Color": "#2635d8",
+     "Death": {
+      "Cause": "head-collision",
+      "EliminatedBy": "30a31a86-5a45-491b-b25d-f8d4904e0924",
+      "Turn": 10
+     },
+     "EliminatedBy": "30a31a86-5a45-491b-b25d-f8d4904e0924",
+     "EliminatedCause": "head-collision",
+     "HeadType": "default",
+     "Health": 90,
+     "ID": "rival-a-id",
+     "Latency": "0",
+     "Name": "rival-a",
+     "Shout": "",
+     "Squad": "",
+     "TailType": "default"
+    },
+    {
+     "APIVersion": "1",
+     "Author": "autor-b",
+     "Body": [
+      {
+       "X": 4,
+       "Y": 4
+      },
+      {
+       "X": 4,
+       "Y": 3
+      },
+      {
+       "X": 3,
+       "Y": 3
+      },
+      {
+       "X": 3,
+       "Y": 4
+      }
+     ],
+     "Color": "#8b0000",
+     "Death": null,
+     "EliminatedBy": "",
+     "EliminatedCause": "",
+     "HeadType": "tiger-king",
+     "Health": 40,
+     "ID": "rival-b-id",
+     "Latency": "24",
+     "Name": "rival-b",
+     "Shout": "",
+     "Squad": "",
+     "TailType": "hook"
+    },
+    {
+     "APIVersion": "1",
+     "Author": "VictorGasperi",
+     "Body": [
+      {
+       "X": 2,
+       "Y": 4
+      },
+      {
+       "X": 2,
+       "Y": 3
+      },
+      {
+       "X": 2,
+       "Y": 2
+      },
+      {
+       "X": 1,
+       "Y": 2
+      },
+      {
+       "X": 0,
+       "Y": 2
+      },
+      {
+       "X": 0,
+       "Y": 3
+      },
+      {
+       "X": 0,
+       "Y": 4
+      },
+      {
+       "X": 0,
+       "Y": 5
+      },
+      {
+       "X": 1,
+       "Y": 5
+      },
+      {
+       "X": 2,
+       "Y": 5
+      },
+      {
+       "X": 3,
+       "Y": 5
+      }
+     ],
+     "Color": "#e80978",
+     "Death": null,
+     "EliminatedBy": "",
+     "EliminatedCause": "",
+     "HeadType": "tiger-king",
+     "Health": 96,
+     "ID": "30a31a86-5a45-491b-b25d-f8d4904e0924",
+     "Latency": "194",
+     "Name": "gasperi-1",
+     "Shout": "",
+     "Squad": "",
+     "TailType": "tiger-tail"
+    }
+   ],
+   "Turn": 74
+  },
+  {
+   "Food": [
+    {
+     "X": 1,
+     "Y": 9
+    },
+    {
+     "X": 10,
+     "Y": 4
+    },
+    {
+     "X": 7,
+     "Y": 2
+    }
+   ],
+   "Hazards": [],
+   "Snakes": [
+    {
+     "APIVersion": "1",
+     "Author": "autor-a",
+     "Body": [
+      {
+       "X": 5,
+       "Y": 3
+      },
+      {
+       "X": 5,
+       "Y": 4
+      },
+      {
+       "X": 4,
+       "Y": 4
+      }
+     ],
+     "Color": "#2635d8",
+     "Death": {
+      "Cause": "head-collision",
+      "EliminatedBy": "30a31a86-5a45-491b-b25d-f8d4904e0924",
+      "Turn": 10
+     },
+     "EliminatedBy": "30a31a86-5a45-491b-b25d-f8d4904e0924",
+     "EliminatedCause": "head-collision",
+     "HeadType": "default",
+     "Health": 90,
+     "ID": "rival-a-id",
+     "Latency": "0",
+     "Name": "rival-a",
+     "Shout": "",
+     "Squad": "",
+     "TailType": "default"
+    },
+    {
+     "APIVersion": "1",
+     "Author": "autor-b",
+     "Body": [
+      {
+       "X": 4,
+       "Y": 5
+      },
+      {
+       "X": 4,
+       "Y": 4
+      },
+      {
+       "X": 4,
+       "Y": 3
+      },
+      {
+       "X": 3,
+       "Y": 3
+      }
+     ],
+     "Color": "#8b0000",
+     "Death": null,
+     "EliminatedBy": "",
+     "EliminatedCause": "",
+     "HeadType": "tiger-king",
+     "Health": 39,
+     "ID": "rival-b-id",
+     "Latency": "26",
+     "Name": "rival-b",
+     "Shout": "",
+     "Squad": "",
+     "TailType": "hook"
+    },
+    {
+     "APIVersion": "1",
+     "Author": "VictorGasperi",
+     "Body": [
+      {
+       "X": 1,
+       "Y": 4
+      },
+      {
+       "X": 2,
+       "Y": 4
+      },
+      {
+       "X": 2,
+       "Y": 3
+      },
+      {
+       "X": 2,
+       "Y": 2
+      },
+      {
+       "X": 1,
+       "Y": 2
+      },
+      {
+       "X": 0,
+       "Y": 2
+      },
+      {
+       "X": 0,
+       "Y": 3
+      },
+      {
+       "X": 0,
+       "Y": 4
+      },
+      {
+       "X": 0,
+       "Y": 5
+      },
+      {
+       "X": 1,
+       "Y": 5
+      },
+      {
+       "X": 2,
+       "Y": 5
+      }
+     ],
+     "Color": "#e80978",
+     "Death": null,
+     "EliminatedBy": "",
+     "EliminatedCause": "",
+     "HeadType": "tiger-king",
+     "Health": 95,
+     "ID": "30a31a86-5a45-491b-b25d-f8d4904e0924",
+     "Latency": "176",
+     "Name": "gasperi-1",
+     "Shout": "",
+     "Squad": "",
+     "TailType": "tiger-tail"
+    }
+   ],
+   "Turn": 75
+  }
+ ]
+}

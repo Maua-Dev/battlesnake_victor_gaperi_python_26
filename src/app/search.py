@@ -161,12 +161,20 @@ def minimax_value(
     depth: int,
     prune: bool = True,
     root_moves: list[str] | None = None,
-) -> float:
-    """Valor da raiz numa profundidade fixa, sem prazo. Com prune=False é o
-    minimax puro, para conferir que a poda não muda o valor.
+    deadline=None,
+) -> float | None:
+    """Valor da raiz numa profundidade fixa. Com prune=False é o minimax
+    puro, para conferir que a poda não muda o valor.
+
+    Sem deadline (clock.Deadline), não há prazo. Com ele, devolve None se o
+    prazo passar no meio da busca. A cobra não usa este caminho; ele serve
+    à análise de partidas (scripts/replay.py).
     """
-    search = _Search(me, rival, prune=prune)
-    return search.max_value(board, depth, -math.inf, math.inf, 0, root_moves)
+    search = _Search(me, rival, deadline, prune=prune)
+    try:
+        return search.max_value(board, depth, -math.inf, math.inf, 0, root_moves)
+    except _Timeout:
+        return None
 
 
 def best_move(
