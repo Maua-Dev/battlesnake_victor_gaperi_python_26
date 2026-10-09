@@ -28,7 +28,7 @@ A decisão SHALL agrupar as medições em quatro camadas, nesta ordem de prefer�
 3. não arriscada e sem espaço;
 4. arriscada e sem espaço.
 
-Nenhuma pontuação de uma camada posterior SHALL vencer uma medição de camada anterior.
+Nenhuma pontuação de uma camada posterior SHALL vencer uma medição de camada anterior. `roomy` chega pronto nas medições (ver "Área alcançável" em `caracteristicas-de-movimento`), e a decisão não o recalcula. Os cenários com tabuleiro descrevem a escolha heurística, que vem antes da busca do duelo (ver `busca-no-duelo`).
 
 #### Scenario: Não arriscada com espaço vence tudo
 - **WHEN** `up` está na camada 2 com pontuação 500 e `down` está na camada 1 com pontuação 0
@@ -39,15 +39,19 @@ Nenhuma pontuação de uma camada posterior SHALL vencer uma medição de camada
 - **THEN** a resposta é a da camada 2; sem ela, a da camada 3; sem as duas, a da camada 4
 
 #### Scenario: Beco versus cabeça a cabeça
+- **WHEN** o corpo é [(2,10),(3,10),(4,10),(5,10)] e uma adversária de tamanho 8 ocupa [(2,8),(1,8),(1,9),(0,9),(0,8),(0,7),(0,6),(0,5)]
+- **THEN** `left` é não arriscada mas leva a um bolsão de 2 casas, cercado por (1,9) e (0,9), que só liberam em 6 e 5 movimentos. `down` é arriscada e tem espaço, e a escolha heurística é `down`
+
+#### Scenario: Persegue a própria cauda em vez do cabeça a cabeça
 - **WHEN** o corpo é [(0,1),(1,1),(2,1),(2,0),(1,0)] e uma adversária de tamanho 6 ocupa [(0,3),(0,4),(0,5),(0,6),(0,7),(0,8)]
-- **THEN** `down` é não arriscada mas leva a um bolsão de 2 casas, `up` é arriscada com área grande, e a resposta é `up`
+- **THEN** `down` é não arriscada e tem espaço, porque a cobra sai perseguindo a própria cauda, e a escolha heurística é `down`, e não `up`, que é arriscada
 
 #### Scenario: Não morde a isca
 - **WHEN** o corpo é [(5,5),(5,4),(5,3),(5,2)] e uma adversária de tamanho 5 ocupa [(7,5),(8,5),(9,5),(10,5),(10,4)]
-- **THEN** `right` é arriscada e a resposta é `left`
+- **THEN** `right` é arriscada e a escolha heurística é `left`
 
 ### Requirement: Pontuação dentro da camada
-Dentro da camada escolhida, cada medição SHALL receber a pontuação abaixo, com os pesos vindos do módulo de configuração:
+Dentro da camada escolhida, cada medição SHALL receber a pontuação abaixo, com os pesos vindos do módulo de configuração. A profundidade alvo é `min(tamanho da cobra no contexto, SURVIVAL_MAX_DEPTH)`.
 
 ```
 score = W_TERRITORY * territory_pct
@@ -57,9 +61,12 @@ score = W_TERRITORY * territory_pct
       + (hunt_step e sem fome ? W_HUNT : 0)
       - (danger ? W_DANGER : 0)
       - (sem fome ? W_CENTER * center_dist : 0)
+      + W_SURVIVAL * survival_depth / profundidade alvo
+      - (hazard ? W_HAZARD : 0)
+      - W_SQUEEZE * rival_territory_pct
 ```
 
-A maior pontuação SHALL vencer.
+A maior pontuação SHALL vencer. Com os valores padrão dos campos novos (`survival_depth` 0, `hazard` falso e `rival_territory_pct` 0), as três últimas parcelas valem 0.
 
 #### Scenario: Peso do território
 - **WHEN** duas medições na mesma camada diferem só em `territory_pct`, 30 e 40
@@ -89,13 +96,25 @@ A maior pontuação SHALL vencer.
 - **WHEN** `up` tem `center_dist` 8 e `down` tem `center_dist` 2, com o mesmo `territory_pct`
 - **THEN** sem fome a resposta é `down`, e com fome é `up` pelo desempate
 
+#### Scenario: Peso da sobrevivência
+- **WHEN** o tamanho no contexto é 5, `up` tem `survival_depth` 5 e `territory_pct` 0, e `down` tem `survival_depth` 0 e `territory_pct` 19, com fome
+- **THEN** a resposta é `up` (20 > 19)
+
+#### Scenario: Peso do hazard
+- **WHEN** `up` tem `hazard` verdadeiro e `territory_pct` 40, e `down` tem `territory_pct` 15, com fome
+- **THEN** a resposta é `down` (15 > 10)
+
+#### Scenario: Peso do cerco
+- **WHEN** `up` tem `territory_pct` 30 e `rival_territory_pct` 40, e `down` tem `territory_pct` 20 e `rival_territory_pct` 0, com fome
+- **THEN** a resposta é `down` (20 > 10)
+
 #### Scenario: Encurrala a rival menor
 - **WHEN** o corpo é [(2,9),(1,9),(1,8),(1,7)], uma adversária "menor" ocupa [(0,10),(0,9),(0,8)] e há comida em (5,9), cujo caminho começa por `right`
-- **THEN** a resposta é `up`, que fecha a única saída da rival e vale mais que seguir a comida
+- **THEN** a escolha heurística é `up`, que fecha a única saída da rival e vale mais que seguir a comida
 
 #### Scenario: Ataca a rival menor
 - **WHEN** o corpo é [(5,5),(5,4),(5,3),(5,2)], uma adversária de tamanho 3 ocupa [(7,5),(8,5),(9,5)] e há comida em (5,8), cujo caminho começa por `up`
-- **THEN** a resposta é `right`, a casa que a rival menor pode ocupar no próximo turno
+- **THEN** a escolha heurística é `right`, a casa que a rival menor pode ocupar no próximo turno
 
 ### Requirement: Desempate pela ordem canônica
 Em empate de pontuação, a decisão SHALL escolher a primeira direção na ordem `up, down, left, right`, independentemente da ordem em que as medições chegaram.
@@ -108,9 +127,10 @@ Em empate de pontuação, a decisão SHALL escolher a primeira direção na orde
 Para as mesmas entradas da decisão (lista de medições e contexto da jogada), SHALL existir uma explicação que devolve:
 - o movimento escolhido, sempre igual ao devolvido pela decisão;
 - para cada medição, a camada de segurança (de 0 a 3, na ordem do requisito "Camadas de segurança"), a pontuação e as parcelas da pontuação;
-- o motivo da escolha.
+- o motivo da escolha;
+- a ordem completa das medições, da melhor para a pior, que a busca do duelo usa para ordenar e desempatar (ver `busca-no-duelo`).
 
-As parcelas SHALL ser `territory`, `food`, `trap`, `kill`, `hunt`, `danger` e `center`, com os sinais da fórmula de "Pontuação dentro da camada" (`danger` e `center` são negativas ou zero). A soma delas SHALL ser igual à pontuação usada pela decisão.
+As parcelas SHALL ser `territory`, `food`, `trap`, `kill`, `hunt`, `danger`, `center`, `survival`, `hazard` e `squeeze`, com os sinais da fórmula de "Pontuação dentro da camada" (`danger`, `center`, `hazard` e `squeeze` são negativas ou zero). A soma delas SHALL ser igual à pontuação usada pela decisão.
 
 O motivo SHALL ser:
 - `only_option`: a lista tem uma única medição;
@@ -135,6 +155,10 @@ A explicação segue as restrições do requisito "Entradas restritas": não lê
 #### Scenario: Empate com lista fora de ordem
 - **WHEN** a explicação recebe as medições [`right`, `up`] com a mesma camada e a mesma pontuação
 - **THEN** o movimento é `up` e o motivo é `tie`
+
+#### Scenario: Parcelas novas
+- **WHEN** a medição tem `survival_depth` 5 com tamanho 5 no contexto, `hazard` verdadeiro e `rival_territory_pct` 40
+- **THEN** as parcelas trazem `survival` 20, `hazard` -30 e `squeeze` -20
 
 #### Scenario: Coerência com a decisão
 - **WHEN** a decisão e a explicação recebem as mesmas medições e o mesmo contexto, em qualquer cenário de teste da decisão
