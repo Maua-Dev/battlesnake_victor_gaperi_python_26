@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from . import config
 from .astar import a_star
 from .decision import DecisionContext, MoveFeatures
-from .floodfill import flood_fill
+from .floodfill import flood_fill, region_sizes
 from .grid import (
     Pos, pos, step, manhattan, neighbors, obstacles, threat_zones,
     would_lose_head_to_head,
@@ -146,14 +146,16 @@ def trapped_rivals(state: GameState, snap: TurnSnapshot, new_head: Pos) -> tuple
     """Rivais que ficam sem espaço para o próprio corpo depois do meu passo.
 
     A área da rival é o maior flood fill entre as casas vizinhas à cabeça
-    dela, com a minha nova cabeça virando obstáculo.
+    dela, com a minha nova cabeça virando obstáculo. Uma única rotulagem de
+    regiões atende todas as saídas de todas as rivais: cada região livre é
+    percorrida uma vez, em vez de um flood fill por saída.
     """
     board = state.board
-    sim = snap.obstacles | {new_head}
+    sizes = region_sizes(board, snap.obstacles | {new_head})
     trapped = []
     for rival in snap.rivals:
         exits = neighbors(board, pos(rival.head), set())
-        rival_area = max((flood_fill(board, cell, sim) for cell in exits), default=0)
+        rival_area = max((sizes(cell) for cell in exits), default=0)
         if rival_area < rival.length:
             trapped.append(rival.id)
     return tuple(trapped)
