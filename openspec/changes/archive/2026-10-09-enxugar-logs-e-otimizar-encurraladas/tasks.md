@@ -101,4 +101,4 @@
   - exatamente uma linha `move` por turno no CloudWatch;
   - a consulta de `REPORT` com a duração média bem abaixo dos 155 a 525 ms de antes;
   - a sintaxe do filtro booleano, registrando em `docs/logs.md` a forma que funcionou.
-- [ ] 10.3 Ao arquivar esta mudança, reescrever o `## Purpose` de `openspec/specs/telemetria-de-diagnostico/spec.md`, que ainda fala em "explicar cada movimento" e nas três hipóteses, para descrever os dois eventos enxutos.
+- [x] 10.3 Ao arquivar esta mudança, reescrever o `## Purpose` de `openspec/specs/telemetria-de-diagnostico/spec.md`, que ainda fala em "explicar cada movimento" e nas três hipóteses, para descrever os dois eventos enxutos.
